@@ -193,6 +193,8 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const processingRef = useRef(false)
+  // File d'attente interne (ref = pas de stale closure, mutations visibles immédiatement)
+  const pendingRef = useRef<QueueItem[]>([])
 
   function handleConditionChange(v: Condition) {
     conditionRef.current = v
@@ -200,6 +202,7 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
   }
 
   function removeItem(id: string) {
+    pendingRef.current = pendingRef.current.filter(i => i.id !== id)
     setQueue(prev => {
       const item = prev.find(i => i.id === id)
       if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl)
@@ -215,13 +218,17 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
     })
   }
 
-  // Traite une liste d'items directement (évite les stale closures)
-  async function processItems(items: QueueItem[]) {
-    if (processingRef.current) return
+  // Consomme pendingRef jusqu'à épuisement.
+  // Si de nouveaux items arrivent pendant le traitement, ils sont dans pendingRef
+  // et seront pris au prochain tour de boucle.
+  async function startProcessing() {
+    if (processingRef.current) return // déjà en cours — les nouveaux items sont dans pendingRef
     processingRef.current = true
     setProcessing(true)
 
-    for (const item of items) {
+    while (pendingRef.current.length > 0) {
+      const item = pendingRef.current.shift()! // FIFO
+
       setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing' } : i))
       try {
         const resized = await resizeImage(item.file, 1024)
@@ -253,7 +260,7 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
     setProcessing(false)
   }
 
-  // Ajoute les fichiers à la file ET démarre le scan automatiquement
+  // Ajoute les fichiers dans pendingRef ET démarre le scan (ou pas si déjà en cours)
   const addFiles = useCallback((files: FileList | File[]) => {
     const newItems: QueueItem[] = Array.from(files)
       .filter(isImageFile)
@@ -264,9 +271,9 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
         status: 'pending' as const,
       }))
     if (newItems.length === 0) return
+    pendingRef.current.push(...newItems) // accessible immédiatement dans la boucle en cours
     setQueue(prev => [...prev, ...newItems])
-    // Auto-démarrage immédiat
-    processItems(newItems)
+    startProcessing() // no-op si déjà en cours, mais les items sont dans pendingRef
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onNewCard])
 
