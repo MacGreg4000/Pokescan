@@ -59,11 +59,13 @@ export async function searchByNameAndNumber(
 /**
  * Recherche par numéro de carte — méthode principale (indépendante de la langue).
  * Utilise total_in_set pour cibler le bon set, puis filtre par HP.
+ * hpTolerance : tolérance en points de vie (défaut ±10, passer 100 pour un filtre large)
  */
 export async function searchByNumber(
   cardNumber: string | number,
   hp?: number | null,
-  totalInSet?: number | null
+  totalInSet?: number | null,
+  hpTolerance: number = 10
 ): Promise<PokemonTCGCard[]> {
   try {
     // Normaliser le numéro : "056" → "56", 56 → "56"
@@ -85,12 +87,12 @@ export async function searchByNumber(
     const byHp = cards.filter(c => parseInt(c.hp ?? '0') === hp)
     if (byHp.length > 0) return byHp
 
-    // Tolérance ±10 HP (certaines éditions ont des HP légèrement différents)
-    const byHpTolerant = cards.filter(c => Math.abs(parseInt(c.hp ?? '0') - hp) <= 10)
+    // Tolérance configurable (certaines éditions ont des HP légèrement différents)
+    const byHpTolerant = cards.filter(c => Math.abs(parseInt(c.hp ?? '0') - hp) <= hpTolerance)
     if (byHpTolerant.length > 0) return byHpTolerant
 
     // Aucun HP compatible → refuser plutôt que renvoyer une carte incorrecte
-    console.log(`[pokemontcg] Aucune carte avec HP=${hp} parmi les n°${num} — résultat rejeté`)
+    console.log(`[pokemontcg] Aucune carte avec HP=${hp}±${hpTolerance} parmi les n°${num} — résultat rejeté`)
     return []
   } catch {
     return []

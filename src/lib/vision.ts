@@ -8,7 +8,14 @@ const VISION_PROMPT = `/no_think
 You are a Pokémon Trading Card Game card scanner. Look at the card image carefully.
 
 CRITICAL INSTRUCTIONS:
-1. Read the card number at the bottom. It is formatted as "X/Y" or "XXX/YYY". Extract X as card_number and Y as total_in_set. These are always integers. Never return null for card_number if a slash notation is visible.
+1. Read the card number at the bottom using these EXACT rules:
+   - Standard format "X/Y" or "XXX/YYY" (contains a SLASH): card_number=X (integer), total_in_set=Y (integer)
+     Example: "58/102" → card_number=58, total_in_set=102
+     Example: "12/65" → card_number=12, total_in_set=65
+   - Promo/special format with NO slash (e.g. "SVP18", "SWSH042", "SM256", "SVP18 056"):
+     card_number = digits AFTER the set prefix (SVP18→18, SWSH042→42, SM256→256)
+     total_in_set = null (NEVER invent a value — there is no Y)
+   - RULE: If you do NOT see a slash "/", total_in_set MUST be null. Never guess it.
 2. Return ONLY a JSON object. No markdown, no explanation, no text outside the JSON.
 
 JSON Schema:

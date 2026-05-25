@@ -66,12 +66,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
       }
 
-      // Essai 3 : numéro seul sans filtre HP (retourne le premier résultat)
-      if (cards.length === 0) {
-        console.log(`[vision] Essai numéro seul sans filtre HP`)
-        cards = await searchByNumber(cardNum, null, null)
+      // Essai 3 : numéro + HP très tolérant (±100) — évite les faux positifs
+      // Ex : Sandile (70 HP) ne peut pas matcher Charizard EX (330 HP), écart = 260 > 100
+      if (cards.length === 0 && vision.hp) {
+        console.log(`[vision] Essai numéro + HP tolérant (±100)`)
+        cards = await searchByNumber(cardNum, vision.hp, null, 100)
         if (cards.length > 0) {
-          console.log(`[vision] Trouvé (n° seul) : ${cards[0].name} (${cards[0].set.name})`)
+          console.log(`[vision] Trouvé (n°+HP±100) : ${cards[0].name} (${cards[0].set.name})`)
         }
       }
     }

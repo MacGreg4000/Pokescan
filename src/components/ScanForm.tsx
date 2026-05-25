@@ -359,23 +359,50 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
 // ── Onglet MANUEL ─────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════
 
+// Parse "56/102" ou "56" ou "SVP18" → { cardNumber, totalInSet }
+function parseCardNumber(raw: string): { cardNumber: string; totalInSet: number | undefined } {
+  const trimmed = raw.trim()
+  // Format X/Y
+  const slashMatch = trimmed.match(/^(\d+)\s*\/\s*(\d+)$/)
+  if (slashMatch) return { cardNumber: slashMatch[1], totalInSet: parseInt(slashMatch[2]) }
+  // Format promo SVPNN, SWSHNN, etc.
+  const promoMatch = trimmed.match(/^[A-Za-z]+(\d+)(?:\s+\d+)?$/)
+  if (promoMatch) return { cardNumber: promoMatch[1], totalInSet: undefined }
+  // Format numéro seul
+  if (/^\d+$/.test(trimmed)) return { cardNumber: trimmed, totalInSet: undefined }
+  return { cardNumber: trimmed, totalInSet: undefined }
+}
+
 function ManualTab({ sets, onNewCard }: { sets: SetCache[]; onNewCard?: () => void }) {
   const [name, setName] = useState('')
+  const [cardNumberRaw, setCardNumberRaw] = useState('')
   const [setId, setSetId] = useState('')
   const [condition, setCondition] = useState<Condition>('NM')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const canSubmit = name.trim() !== '' || cardNumberRaw.trim() !== ''
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!canSubmit) return
     setLoading(true); setResult(null); setError(null)
     try {
+      const { cardNumber, totalInSet } = cardNumberRaw.trim()
+        ? parseCardNumber(cardNumberRaw)
+        : { cardNumber: undefined, totalInSet: undefined }
+
+      const payload: Record<string, unknown> = { condition }
+      if (name.trim()) payload.name = name.trim()
+      if (cardNumber) payload.cardNumber = cardNumber
+      if (totalInSet) payload.totalInSet = totalInSet
+      if (setId) payload.setId = setId
+
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), setId: setId || undefined, condition }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) setError(data.error ?? 'Erreur inconnue')
@@ -389,20 +416,45 @@ function ManualTab({ sets, onNewCard }: { sets: SetCache[]; onNewCard?: () => vo
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Astuce langue */}
+      <div className="bg-poke-yellow/10 border border-poke-yellow/30 rounded-xl px-3 py-2 text-xs text-poke-yellow/80 flex gap-2 items-start">
+        <span className="text-base leading-none mt-0.5">💡</span>
+        <span>
+          La base de données est en <strong>anglais</strong>. Tapez <em>Charizard EX</em>, pas <em>Dracaufeu EX</em>.
+          <br />Ou utilisez le <strong>numéro de carte</strong> — il fonctionne quelle que soit la langue.
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-white/60 mb-1">Nom de la carte</label>
+          <label className="block text-xs font-medium text-white/60 mb-1">
+            Nom de la carte <span className="text-white/30">(anglais)</span>
+          </label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="ex: Pikachu"
-            required
+            placeholder="ex: Charizard EX"
             className="w-full bg-poke-dark border border-white/20 rounded-lg px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-poke-yellow/60 focus:ring-1 focus:ring-poke-yellow/30 transition"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-white/60 mb-1">Extension</label>
+          <label className="block text-xs font-medium text-white/60 mb-1">
+            N° de carte <span className="text-white/30">(optionnel, fonctionne en FR)</span>
+          </label>
+          <input
+            type="text"
+            value={cardNumberRaw}
+            onChange={e => setCardNumberRaw(e.target.value)}
+            placeholder="ex: 56/102  ou  56  ou  SVP18"
+            className="w-full bg-poke-dark border border-white/20 rounded-lg px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-poke-yellow/60 focus:ring-1 focus:ring-poke-yellow/30 transition"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-white/60 mb-1">Extension <span className="text-white/30">(optionnel)</span></label>
           <select
             value={setId}
             onChange={e => setSetId(e.target.value)}
@@ -422,7 +474,7 @@ function ManualTab({ sets, onNewCard }: { sets: SetCache[]; onNewCard?: () => vo
 
       <button
         type="submit"
-        disabled={loading || !name.trim()}
+        disabled={loading || !canSubmit}
         className="w-full py-3 rounded-xl font-bold text-sm bg-poke-red text-white hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
       >
         {loading ? (
