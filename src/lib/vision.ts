@@ -5,18 +5,26 @@ const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL ?? 'qwen3-vl:8b'
 
 // /no_think désactive le mode raisonnement de Qwen3-VL — sortie JSON directe
 const VISION_PROMPT = `/no_think
-You are a Pokémon Trading Card Game card scanner. Carefully read the card in the image and extract the printed information.
-Respond with ONLY valid JSON — no text, no markdown, no explanation outside the JSON object.
+You are a Pokémon Trading Card Game card scanner. Look at the card image carefully.
 
-JSON Schema (respond with exactly this structure):
+CRITICAL INSTRUCTIONS:
+1. Read the card number at the bottom. It is formatted as "X/Y" or "XXX/YYY". Extract X as card_number and Y as total_in_set. These are always integers. Never return null for card_number if a slash notation is visible.
+2. Return ONLY a JSON object. No markdown, no explanation, no text outside the JSON.
+
+JSON Schema:
 {
-  "name": "exact card name printed at the top of the card",
-  "card_number": "number before the slash at bottom-right (e.g. '58' from '58/102'), or null",
-  "total_in_set": "number after the slash at bottom-right (e.g. '102' from '58/102'), or null",
-  "hp": "HP value as integer, or null if not a Pokemon card",
-  "card_type": "Pokemon or Trainer or Energy",
-  "confidence": "high if all fields clearly readable, medium if some are guessed, low if image is unclear"
-}`
+  "name": "exact card name printed at the top",
+  "card_number": 58,
+  "total_in_set": 102,
+  "hp": 330,
+  "card_type": "Pokemon",
+  "confidence": "high"
+}
+
+Rules:
+- card_number and total_in_set are INTEGERS (not strings), or null only if truly not visible
+- hp is an INTEGER or null if not a Pokémon card
+- confidence: "high" all fields clear, "medium" some guessed, "low" image unclear`
 
 export interface CardVisionResult {
   name: string

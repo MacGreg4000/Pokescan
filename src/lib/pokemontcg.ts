@@ -57,21 +57,30 @@ export async function searchByNameAndNumber(
 }
 
 /**
- * Recherche par numéro de carte seul — fallback quand le nom est en langue étrangère
- * (ex: "Dracaufeu EX" au lieu de "Charizard EX").
- * Filtre optionnel par HP pour affiner parmi les homonymes de numéro.
+ * Recherche par numéro de carte — méthode principale (indépendante de la langue).
+ * Utilise total_in_set pour cibler le bon set, puis filtre par HP.
  */
 export async function searchByNumber(
-  cardNumber: string,
-  hp?: number | null
+  cardNumber: string | number,
+  hp?: number | null,
+  totalInSet?: number | null
 ): Promise<PokemonTCGCard[]> {
   try {
+    // Normaliser le numéro : "056" → "56", 56 → "56"
+    const num = String(cardNumber).replace(/^0+/, '') || String(cardNumber)
+
+    let query = `number:"${encodeURIComponent(num)}"`
+    // total_in_set permet de cibler le bon set (ex: 24 cartes → set très spécifique)
+    if (totalInSet) query += ` set.total:${totalInSet}`
+
     const data = await apiFetch<PokemonTCGCardsResponse>(
-      `/cards?q=number:"${encodeURIComponent(cardNumber)}"&pageSize=30`
+      `/cards?q=${query}&pageSize=30`
     )
     const cards = data.data ?? []
-    if (!hp || cards.length <= 1) return cards
-    // Filtrer par HP si fourni (très discriminant : Charizard EX 330 HP est unique)
+    if (cards.length === 0) return []
+    if (!hp || cards.length === 1) return cards
+
+    // Filtrer par HP (très discriminant : Charizard EX 330 HP est unique)
     const byHp = cards.filter(c => parseInt(c.hp ?? '0') === hp)
     return byHp.length > 0 ? byHp : cards
   } catch {
