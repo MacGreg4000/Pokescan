@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   nextjs:
     build:
@@ -7,14 +5,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "4444:3000"
+    env_file:
+      - .env.local
     environment:
-      - POKEMONTCG_API_KEY=${POKEMONTCG_API_KEY:-}
-      - OLLAMA_URL=http://192.168.0.77:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
-      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-qwen3-vl:8b}
+      # DATABASE_PATH est forcé ici pour écraser la valeur de .env.local
       - DATABASE_PATH=/data/pokescan.db
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-pokescan2026}
-      - ADMIN_SESSION_TOKEN=${ADMIN_SESSION_TOKEN}
     volumes:
       - sqlite_data:/data
     restart: unless-stopped
