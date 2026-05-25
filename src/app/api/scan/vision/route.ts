@@ -44,21 +44,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const cardName = vision.name.trim()
 
-    // 3. Recherche pokemontcg.io — stratégie en cascade
-    let cards = await searchByNameAndNumber(cardName, vision.card_number)
+    // 3. Recherche pokemontcg.io — priorité au numéro (objectif, indépendant de la langue)
+    let cards: Awaited<ReturnType<typeof searchByNameAndNumber>> = []
 
-    // Fallback : nom FR non reconnu → chercher par numéro + HP (très discriminant)
-    if (cards.length === 0 && vision.card_number) {
-      console.log(`[vision] Nom "${cardName}" non trouvé → fallback recherche par numéro ${vision.card_number}`)
+    if (vision.card_number) {
+      // 1er choix : numéro + HP (très discriminant, fonctionne pour toutes les langues)
       cards = await searchByNumber(vision.card_number, vision.hp)
+      if (cards.length > 0) {
+        console.log(`[vision] Trouvé par numéro ${vision.card_number} : ${cards[0].name} (${cards[0].set.name})`)
+      }
+    }
+
+    if (cards.length === 0) {
+      // 2e choix : nom + numéro (cartes EN, ou si pas de numéro détecté)
+      cards = await searchByNameAndNumber(cardName, vision.card_number)
+      if (cards.length > 0) {
+        console.log(`[vision] Trouvé par nom "${cardName}" : ${cards[0].name} (${cards[0].set.name})`)
+      } else {
+        console.log(`[vision] Aucune carte trouvée pour "${cardName}" n°${vision.card_number}`)
+      }
     }
 
     const rawCard = cards[0] ?? null
-    if (rawCard) {
-      console.log(`[vision] Carte trouvée : ${rawCard.name} (${rawCard.set.name})`)
-    } else {
-      console.log(`[vision] Aucune carte trouvée pour "${cardName}" n°${vision.card_number}`)
-    }
 
     const priceUSD = rawCard ? extractPriceUSD(rawCard) : null
     const priceEUR = rawCard ? extractPriceEUR(rawCard) : null
