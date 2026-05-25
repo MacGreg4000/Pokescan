@@ -156,23 +156,17 @@ function QueueRow({ item, onRemove }: { item: QueueItem; onRemove: (id: string) 
 
 function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
   const [condition, setCondition] = useState<Condition>('NM')
+  const conditionRef = useRef<Condition>('NM')
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [processing, setProcessing] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const processingRef = useRef(false)
 
-  const addFiles = useCallback((files: FileList | File[]) => {
-    const items: QueueItem[] = Array.from(files)
-      .filter(f => f.type.startsWith('image/'))
-      .map(file => ({
-        id: crypto.randomUUID(),
-        file,
-        previewUrl: URL.createObjectURL(file),
-        status: 'pending' as const,
-      }))
-    setQueue(prev => [...prev, ...items])
-  }, [])
+  function handleConditionChange(v: Condition) {
+    conditionRef.current = v
+    setCondition(v)
+  }
 
   function removeItem(id: string) {
     setQueue(prev => {
@@ -190,41 +184,36 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
     })
   }
 
-  async function startProcessing() {
+  // Traite une liste d'items directement (évite les stale closures)
+  async function processItems(items: QueueItem[]) {
     if (processingRef.current) return
     processingRef.current = true
     setProcessing(true)
 
-    // Snapshot des items en attente au moment du clic
-    const snapshot = queue.filter(i => i.status === 'pending').map(i => i.id)
-
-    for (const id of snapshot) {
-      setQueue(prev => prev.map(i => i.id === id ? { ...i, status: 'processing' } : i))
-
+    for (const item of items) {
+      setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing' } : i))
       try {
-        const item = queue.find(i => i.id === id)!
         const resized = await resizeImage(item.file, 1024)
-
         const fd = new FormData()
         fd.append('image', resized, item.file.name)
-        fd.append('condition', condition)
+        fd.append('condition', conditionRef.current)
 
         const res = await fetch('/api/scan/vision', { method: 'POST', body: fd })
         const data = await res.json()
 
         if (!res.ok) {
           setQueue(prev => prev.map(i =>
-            i.id === id ? { ...i, status: 'error', error: data.detail ?? data.error ?? 'Erreur inconnue' } : i
+            i.id === item.id ? { ...i, status: 'error', error: data.detail ?? data.error ?? 'Erreur inconnue' } : i
           ))
         } else {
           setQueue(prev => prev.map(i =>
-            i.id === id ? { ...i, status: 'done', result: data as ScanResult } : i
+            i.id === item.id ? { ...i, status: 'done', result: data as ScanResult } : i
           ))
           onNewCard?.()
         }
       } catch (err) {
         setQueue(prev => prev.map(i =>
-          i.id === id ? { ...i, status: 'error', error: String(err) } : i
+          i.id === item.id ? { ...i, status: 'error', error: String(err) } : i
         ))
       }
     }
@@ -233,33 +222,33 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
     setProcessing(false)
   }
 
-  const pendingCount = queue.filter(i => i.status === 'pending').length
-  const doneCount = queue.filter(i => i.status === 'done').length
-  const errorCount = queue.filter(i => i.status === 'error').length
+  // Ajoute les fichiers à la file ET démarre le scan automatiquement
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const newItems: QueueItem[] = Array.from(files)
+      .filter(f => f.type.startsWith('image/'))
+      .map(file => ({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: 'pending' as const,
+      }))
+    if (newItems.length === 0) return
+    setQueue(prev => [...prev, ...newItems])
+    // Auto-démarrage immédiat
+    processItems(newItems)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onNewCard])
+
+  const processing_ = queue.filter(i => i.status === 'processing').length
+  const doneCount   = queue.filter(i => i.status === 'done').length
+  const errorCount  = queue.filter(i => i.status === 'error').length
 
   return (
     <div className="space-y-4">
-      {/* État + bouton lancer */}
-      <div className="grid grid-cols-3 gap-3 items-end">
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-white/60 mb-1">État des cartes</label>
-          <ConditionPicker value={condition} onChange={setCondition} />
-        </div>
-        <button
-          type="button"
-          onClick={startProcessing}
-          disabled={processing || pendingCount === 0}
-          className="py-2.5 px-4 rounded-xl font-bold text-sm bg-poke-red text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-        >
-          {processing ? (
-            <>
-              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Scan…
-            </>
-          ) : (
-            `📷 Scanner ${pendingCount > 0 ? pendingCount : ''} carte${pendingCount !== 1 ? 's' : ''}`
-          )}
-        </button>
+      {/* Sélecteur d'état */}
+      <div>
+        <label className="block text-xs font-medium text-white/60 mb-1">État des cartes</label>
+        <ConditionPicker value={condition} onChange={handleConditionChange} />
       </div>
 
       {/* Zone de dépôt */}
@@ -271,6 +260,8 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
         className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
           dragOver
             ? 'border-poke-yellow bg-poke-yellow/10 scale-[1.01]'
+            : processing
+            ? 'border-poke-yellow/40 bg-poke-yellow/5'
             : 'border-white/20 hover:border-white/40 bg-white/5 hover:bg-white/8'
         }`}
       >
@@ -282,17 +273,29 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
           className="hidden"
           onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }}
         />
-        <div className="text-4xl mb-2">📷</div>
-        <p className="text-white/70 text-sm font-medium">
-          Glissez vos photos ici ou{' '}
-          <span className="text-poke-yellow underline underline-offset-2">cliquez pour choisir</span>
-        </p>
-        <p className="text-white/30 text-xs mt-1">
-          JPG · PNG · HEIC · WEBP — plusieurs fichiers acceptés
-        </p>
-        <p className="text-white/20 text-xs mt-0.5">
-          Les images sont redimensionnées en 1024 px avant envoi
-        </p>
+        {processing ? (
+          <>
+            <div className="flex justify-center mb-2">
+              <span className="w-8 h-8 border-4 border-white/20 border-t-poke-yellow rounded-full animate-spin" />
+            </div>
+            <p className="text-poke-yellow text-sm font-medium">Scan en cours… ({processing_} carte{processing_ > 1 ? 's' : ''})</p>
+            <p className="text-white/30 text-xs mt-1">Vous pouvez ajouter d'autres photos</p>
+          </>
+        ) : (
+          <>
+            <div className="text-4xl mb-2">📷</div>
+            <p className="text-white/70 text-sm font-medium">
+              Glissez vos photos ici ou{' '}
+              <span className="text-poke-yellow underline underline-offset-2">cliquez pour choisir</span>
+            </p>
+            <p className="text-white/30 text-xs mt-1">
+              JPG · PNG · HEIC · WEBP — plusieurs fichiers acceptés
+            </p>
+            <p className="text-white/20 text-xs mt-0.5">
+              Le scan démarre automatiquement après sélection
+            </p>
+          </>
+        )}
       </div>
 
       {/* File d'attente */}
@@ -305,15 +308,11 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
               {errorCount > 0 && <span className="text-red-400 ml-2">· {errorCount} erreur{errorCount > 1 ? 's' : ''}</span>}
             </span>
             {(doneCount + errorCount) > 0 && !processing && (
-              <button
-                onClick={clearFinished}
-                className="hover:text-white/60 transition"
-              >
+              <button onClick={clearFinished} className="hover:text-white/60 transition">
                 Effacer les terminées
               </button>
             )}
           </div>
-
           <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
             {queue.map(item => (
               <QueueRow key={item.id} item={item} onRemove={removeItem} />
