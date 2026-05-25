@@ -60,7 +60,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (cards.length === 0) {
       // 2e choix : nom + numéro (cartes EN, ou si pas de numéro détecté)
-      cards = await searchByNameAndNumber(cardName, vision.card_number)
+      const numStr = vision.card_number != null ? String(vision.card_number) : null
+      cards = await searchByNameAndNumber(cardName, numStr)
       if (cards.length > 0) {
         console.log(`[vision] Trouvé par nom "${cardName}" : ${cards[0].name} (${cards[0].set.name})`)
       } else {
