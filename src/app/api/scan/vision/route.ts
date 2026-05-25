@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { identifyCardFromImage } from '@/lib/vision'
-import { searchByNameAndNumber, extractPriceUSD, extractPriceEUR } from '@/lib/pokemontcg'
+import { searchByNameAndNumber, searchByNumber, extractPriceUSD, extractPriceEUR } from '@/lib/pokemontcg'
 import { generateScanJSON } from '@/lib/ollama'
 import { insertScannedCard } from '@/lib/db'
 import type { CardCondition, ScanResult } from '@/types/card'
@@ -44,9 +44,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const cardName = vision.name.trim()
 
-    // 3. Recherche pokemontcg.io (nom + numéro pour plus de précision)
-    const cards = await searchByNameAndNumber(cardName, vision.card_number)
+    // 3. Recherche pokemontcg.io — stratégie en cascade
+    let cards = await searchByNameAndNumber(cardName, vision.card_number)
+
+    // Fallback : nom FR non reconnu → chercher par numéro + HP (très discriminant)
+    if (cards.length === 0 && vision.card_number) {
+      console.log(`[vision] Nom "${cardName}" non trouvé → fallback recherche par numéro ${vision.card_number}`)
+      cards = await searchByNumber(vision.card_number, vision.hp)
+    }
+
     const rawCard = cards[0] ?? null
+    if (rawCard) {
+      console.log(`[vision] Carte trouvée : ${rawCard.name} (${rawCard.set.name})`)
+    } else {
+      console.log(`[vision] Aucune carte trouvée pour "${cardName}" n°${vision.card_number}`)
+    }
 
     const priceUSD = rawCard ? extractPriceUSD(rawCard) : null
     const priceEUR = rawCard ? extractPriceEUR(rawCard) : null

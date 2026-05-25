@@ -16,6 +16,7 @@ export interface PokemonTCGCard {
   id: string
   name: string
   number: string
+  hp?: string
   rarity?: string
   images: { small: string; large: string }
   set: { id: string; name: string; series: string }

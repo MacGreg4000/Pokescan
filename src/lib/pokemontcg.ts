@@ -56,6 +56,29 @@ export async function searchByNameAndNumber(
   }
 }
 
+/**
+ * Recherche par numéro de carte seul — fallback quand le nom est en langue étrangère
+ * (ex: "Dracaufeu EX" au lieu de "Charizard EX").
+ * Filtre optionnel par HP pour affiner parmi les homonymes de numéro.
+ */
+export async function searchByNumber(
+  cardNumber: string,
+  hp?: number | null
+): Promise<PokemonTCGCard[]> {
+  try {
+    const data = await apiFetch<PokemonTCGCardsResponse>(
+      `/cards?q=number:"${encodeURIComponent(cardNumber)}"&pageSize=30`
+    )
+    const cards = data.data ?? []
+    if (!hp || cards.length <= 1) return cards
+    // Filtrer par HP si fourni (très discriminant : Charizard EX 330 HP est unique)
+    const byHp = cards.filter(c => parseInt(c.hp ?? '0') === hp)
+    return byHp.length > 0 ? byHp : cards
+  } catch {
+    return []
+  }
+}
+
 export async function getSets(): Promise<PokemonTCGSet[]> {
   const data = await apiFetch<PokemonTCGSetsResponse>('/sets?orderBy=-releaseDate')
   return data.data ?? []
