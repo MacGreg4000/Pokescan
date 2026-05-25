@@ -78,11 +78,20 @@ export async function searchByNumber(
     )
     const cards = data.data ?? []
     if (cards.length === 0) return []
-    if (!hp || cards.length === 1) return cards
+    if (!hp) return cards
+    if (cards.length === 1) return cards
 
-    // Filtrer par HP (très discriminant : Charizard EX 330 HP est unique)
+    // Filtrer par HP — si aucun match, retourner vide plutôt qu'une mauvaise carte
     const byHp = cards.filter(c => parseInt(c.hp ?? '0') === hp)
-    return byHp.length > 0 ? byHp : cards
+    if (byHp.length > 0) return byHp
+
+    // Tolérance ±10 HP (certaines éditions ont des HP légèrement différents)
+    const byHpTolerant = cards.filter(c => Math.abs(parseInt(c.hp ?? '0') - hp) <= 10)
+    if (byHpTolerant.length > 0) return byHpTolerant
+
+    // Aucun HP compatible → refuser plutôt que renvoyer une carte incorrecte
+    console.log(`[pokemontcg] Aucune carte avec HP=${hp} parmi les n°${num} — résultat rejeté`)
+    return []
   } catch {
     return []
   }
