@@ -48,13 +48,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let cards: Awaited<ReturnType<typeof searchByNameAndNumber>> = []
 
     if (vision.card_number) {
-      // Normaliser en nombres (le modèle peut retourner string ou number)
       const cardNum = vision.card_number
       const totalInSet = vision.total_in_set ? Number(vision.total_in_set) || null : null
-      // 1er choix : numéro + total_in_set + HP (ciblage précis, toutes langues)
+
+      // Essai 1 : numéro + total_in_set + HP
       cards = await searchByNumber(cardNum, vision.hp, totalInSet)
       if (cards.length > 0) {
-        console.log(`[vision] Trouvé par numéro ${cardNum}/${totalInSet} : ${cards[0].name} (${cards[0].set.name})`)
+        console.log(`[vision] Trouvé (n°+total+HP) : ${cards[0].name} (${cards[0].set.name})`)
+      }
+
+      // Essai 2 : total_in_set peut être halluciné → numéro + HP seul (tous sets)
+      if (cards.length === 0 && totalInSet) {
+        console.log(`[vision] Essai sans total_in_set (${totalInSet} potentiellement halluciné)`)
+        cards = await searchByNumber(cardNum, vision.hp, null)
+        if (cards.length > 0) {
+          console.log(`[vision] Trouvé (n°+HP) : ${cards[0].name} (${cards[0].set.name})`)
+        }
+      }
+
+      // Essai 3 : numéro seul sans filtre HP (retourne le premier résultat)
+      if (cards.length === 0) {
+        console.log(`[vision] Essai numéro seul sans filtre HP`)
+        cards = await searchByNumber(cardNum, null, null)
+        if (cards.length > 0) {
+          console.log(`[vision] Trouvé (n° seul) : ${cards[0].name} (${cards[0].set.name})`)
+        }
       }
     }
 
