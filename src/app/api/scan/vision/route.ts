@@ -48,10 +48,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let cards: Awaited<ReturnType<typeof searchByNameAndNumber>> = []
 
     if (vision.card_number) {
+      // Normaliser en nombres (le modèle peut retourner string ou number)
+      const cardNum = vision.card_number
+      const totalInSet = vision.total_in_set ? Number(vision.total_in_set) || null : null
       // 1er choix : numéro + total_in_set + HP (ciblage précis, toutes langues)
-      cards = await searchByNumber(vision.card_number, vision.hp, vision.total_in_set)
+      cards = await searchByNumber(cardNum, vision.hp, totalInSet)
       if (cards.length > 0) {
-        console.log(`[vision] Trouvé par numéro ${vision.card_number}/${vision.total_in_set} : ${cards[0].name} (${cards[0].set.name})`)
+        console.log(`[vision] Trouvé par numéro ${cardNum}/${totalInSet} : ${cards[0].name} (${cards[0].set.name})`)
       }
     }
 

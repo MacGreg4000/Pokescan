@@ -28,8 +28,8 @@ Rules:
 
 export interface CardVisionResult {
   name: string
-  card_number: string | null
-  total_in_set: string | null
+  card_number: number | string | null
+  total_in_set: number | string | null
   hp: number | null
   card_type: 'Pokemon' | 'Trainer' | 'Energy' | string
   confidence: 'high' | 'medium' | 'low'
