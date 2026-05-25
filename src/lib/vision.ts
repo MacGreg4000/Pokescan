@@ -57,13 +57,26 @@ export async function identifyCardFromImage(imageBase64: string): Promise<CardVi
   }
 
   const data = (await res.json()) as OllamaGenerateResponse
-  // Nettoyage balises <think> résiduelles (Qwen3)
-  const cleaned = data.response.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  const raw = data.response ?? ''
+
+  // 1. Supprimer les blocs <think>...</think> (Qwen3 reasoning)
+  // 2. Supprimer les balises markdown ```json ... ```
+  const cleaned = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/```(?:json)?\s*/gi, '')
+    .replace(/```/g, '')
+    .trim()
+
+  // 3. Extraire le premier objet JSON { ... } même si du texte l'entoure
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+  const jsonStr = jsonMatch ? jsonMatch[0] : cleaned
 
   try {
-    const result = JSON.parse(cleaned) as CardVisionResult
+    const result = JSON.parse(jsonStr) as CardVisionResult
     return { ...FALLBACK, ...result }
   } catch {
-    throw new Error(`Modèle vision a retourné un JSON invalide: ${cleaned.slice(0, 300)}`)
+    // Log serveur pour debug, message clair pour le client
+    console.error('[vision] JSON invalide reçu du modèle:', raw.slice(0, 500))
+    throw new Error(`Modèle vision a retourné un JSON invalide: ${raw.slice(0, 200)}`)
   }
 }
