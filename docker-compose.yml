@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "4444:3000"
     environment:
       - POKEMONTCG_API_KEY=${POKEMONTCG_API_KEY:-}
       - OLLAMA_URL=http://192.168.0.77:11434
