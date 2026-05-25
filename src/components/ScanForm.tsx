@@ -6,11 +6,34 @@ import type { ScanResult, SetCache } from '@/types/card'
 import PriceBadge from './PriceBadge'
 import { CONDITION_LABELS, CONDITIONS, type Condition } from '@/lib/conditions'
 
+// ── Détection HEIC (par extension ou MIME) ─────────────────────────────────
+function isHeic(file: File): boolean {
+  if (file.type === 'image/heic' || file.type === 'image/heif') return true
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  return ext === 'heic' || ext === 'heif'
+}
+
+// ── Filtre image élargi (inclut les extensions connues si MIME vide) ────────
+function isImageFile(file: File): boolean {
+  if (file.type.startsWith('image/')) return true
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'tiff'].includes(ext ?? '')
+}
+
 // ── Resize helper (côté client, avant envoi) ───────────────────────────────
 async function resizeImage(file: File, maxPx = 1024): Promise<Blob> {
+  let source: Blob = file
+
+  // Convertir HEIC → JPEG avant le canvas (Chrome/Firefox ne décodent pas HEIC)
+  if (isHeic(file)) {
+    const heic2any = (await import('heic2any')).default
+    const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.88 })
+    source = Array.isArray(converted) ? converted[0] : converted
+  }
+
   return new Promise((resolve, reject) => {
     const img = document.createElement('img')
-    const url = URL.createObjectURL(file)
+    const url = URL.createObjectURL(source)
     img.onload = () => {
       let { width, height } = img
       if (width > height) {
@@ -225,7 +248,7 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
   // Ajoute les fichiers à la file ET démarre le scan automatiquement
   const addFiles = useCallback((files: FileList | File[]) => {
     const newItems: QueueItem[] = Array.from(files)
-      .filter(f => f.type.startsWith('image/'))
+      .filter(isImageFile)
       .map(file => ({
         id: crypto.randomUUID(),
         file,
