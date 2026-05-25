@@ -2,6 +2,7 @@ import { getAdminStats, getScannedCards } from '@/lib/db'
 import StatsBar from '@/components/StatsBar'
 import AdminTable from '@/components/AdminTable'
 import RefreshOnScan from '@/components/RefreshOnScan'
+import HowToScan from '@/components/HowToScan'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,11 +24,12 @@ export default function AdminPage() {
       <StatsBar stats={stats} />
 
       {/* Scanner */}
-      <section>
-        <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+      <section className="space-y-4">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2">
           <span className="text-poke-yellow">+</span> Ajouter des cartes
         </h2>
         <RefreshOnScan />
+        <HowToScan />
       </section>
 
       {/* Gestion */}
