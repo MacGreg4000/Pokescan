@@ -37,37 +37,49 @@ const FALLBACK: CardVisionResult = {
 }
 
 export async function identifyCardFromImage(imageBase64: string): Promise<CardVisionResult> {
+  // Utilise /api/chat (multimodal) — qwen3-vl répond mieux qu'avec /api/generate
   const body = {
     model: OLLAMA_VISION_MODEL,
-    prompt: VISION_PROMPT,
-    images: [imageBase64],
+    messages: [
+      {
+        role: 'user',
+        content: VISION_PROMPT,
+        images: [imageBase64],
+      },
+    ],
     stream: false,
     format: 'json',
   }
 
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(120_000), // vision peut être lent
   })
 
   if (!res.ok) {
-    throw new Error(`Modèle vision (${OLLAMA_VISION_MODEL}) a répondu ${res.status}`)
+    const errText = await res.text().catch(() => '')
+    throw new Error(`Modèle vision (${OLLAMA_VISION_MODEL}) a répondu ${res.status}: ${errText.slice(0, 200)}`)
   }
 
-  const data = (await res.json()) as OllamaGenerateResponse
-  const raw = data.response ?? ''
+  const data = await res.json() as Record<string, unknown>
+  console.log('[vision] réponse Ollama brute:', JSON.stringify(data).slice(0, 600))
 
-  // 1. Supprimer les blocs <think>...</think> (Qwen3 reasoning)
-  // 2. Supprimer les balises markdown ```json ... ```
+  // /api/chat → data.message.content
+  const raw: string =
+    (data?.message as Record<string, unknown>)?.content as string
+    ?? (data as unknown as OllamaGenerateResponse)?.response   // fallback /api/generate
+    ?? ''
+
+  // Supprimer <think>…</think> et blocs markdown
   const cleaned = raw
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/```(?:json)?\s*/gi, '')
     .replace(/```/g, '')
     .trim()
 
-  // 3. Extraire le premier objet JSON { ... } même si du texte l'entoure
+  // Extraire le premier { … } même si du texte entoure le JSON
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
   const jsonStr = jsonMatch ? jsonMatch[0] : cleaned
 
@@ -75,8 +87,7 @@ export async function identifyCardFromImage(imageBase64: string): Promise<CardVi
     const result = JSON.parse(jsonStr) as CardVisionResult
     return { ...FALLBACK, ...result }
   } catch {
-    // Log serveur pour debug, message clair pour le client
-    console.error('[vision] JSON invalide reçu du modèle:', raw.slice(0, 500))
+    console.error('[vision] JSON invalide — raw:', raw.slice(0, 500))
     throw new Error(`Modèle vision a retourné un JSON invalide: ${raw.slice(0, 200)}`)
   }
 }
