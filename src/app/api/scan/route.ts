@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchCards, searchByNumber, searchByNameAndNumber, extractPriceUSD, extractPriceEUR } from '@/lib/pokemontcg'
-import { generateScanJSON } from '@/lib/ollama'
+import { generateScanJSON, translateToEnglishName } from '@/lib/ollama'
 import { insertScannedCard } from '@/lib/db'
 import type { CardCondition, ScanResult } from '@/types/card'
 
@@ -64,6 +64,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ? await searchByNameAndNumber(name.trim(), cardNumber.trim())
         : await searchCards(name.trim(), setId)
       if (cards.length > 0) console.log(`[scan/manual] Trouvé par nom "${name}" : ${cards[0].name}`)
+    }
+
+    // Traduction nom FR → EN si toujours rien trouvé
+    if (cards.length === 0 && name.trim()) {
+      const englishName = await translateToEnglishName(name.trim())
+      if (englishName) {
+        console.log(`[scan/manual] Traduction: "${name}" → "${englishName}"`)
+        cards = await searchCards(englishName, setId)
+        if (cards.length > 0) console.log(`[scan/manual] Trouvé par trad. "${englishName}" : ${cards[0].name}`)
+      }
     }
 
     const rawCard = cards[0] ?? null

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { identifyCardFromImage } from '@/lib/vision'
 import { searchByNameAndNumber, searchByNumber, extractPriceUSD, extractPriceEUR } from '@/lib/pokemontcg'
-import { generateScanJSON } from '@/lib/ollama'
+import { generateScanJSON, translateToEnglishName } from '@/lib/ollama'
 import { insertScannedCard } from '@/lib/db'
 import type { CardCondition, ScanResult } from '@/types/card'
 
@@ -78,13 +78,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     if (cards.length === 0) {
-      // 2e choix : nom + numéro (cartes EN, ou si pas de numéro détecté)
+      // Essai 4 : nom + numéro (cartes EN, ou si pas de numéro détecté)
       const numStr = vision.card_number != null ? String(vision.card_number) : null
       cards = await searchByNameAndNumber(cardName, numStr)
       if (cards.length > 0) {
         console.log(`[vision] Trouvé par nom "${cardName}" : ${cards[0].name} (${cards[0].set.name})`)
+      }
+    }
+
+    // Essai 5 : traduction du nom français/autre → anglais via Ollama
+    // Utile pour les cartes FR dont le nom n'est pas indexé par pokemontcg.io
+    if (cards.length === 0) {
+      console.log(`[vision] Tentative de traduction du nom "${cardName}" → anglais`)
+      const englishName = await translateToEnglishName(cardName)
+      if (englishName) {
+        console.log(`[vision] Traduction: "${cardName}" → "${englishName}"`)
+        // Chercher par nom anglais sans numéro (les promos FR ont des n° différents de l'EN)
+        const byEnglish = await searchByNameAndNumber(englishName, null)
+        if (byEnglish.length > 0) {
+          // Filtrer par HP (±100) pour éviter les homonymes
+          if (vision.hp) {
+            const byHp = byEnglish.filter(
+              c => Math.abs(parseInt(c.hp ?? '0') - vision.hp!) <= 100
+            )
+            cards = byHp.length > 0 ? byHp : byEnglish
+          } else {
+            cards = byEnglish
+          }
+          console.log(`[vision] Trouvé par trad. anglaise "${englishName}" : ${cards[0].name} (${cards[0].set.name})`)
+        } else {
+          console.log(`[vision] Aucune carte trouvée même après traduction "${englishName}"`)
+        }
       } else {
-        console.log(`[vision] Aucune carte trouvée pour "${cardName}" n°${vision.card_number}`)
+        console.log(`[vision] Traduction échouée ou nom déjà anglais`)
       }
     }
 

@@ -36,6 +36,38 @@ const SAFE_FALLBACK: ScanJSON = {
   notes: 'Données indisponibles',
 }
 
+/**
+ * Traduit un nom de carte Pokémon dans une autre langue vers l'anglais.
+ * Utilise Ollama pour les traductions FR/JP/ES/DE → EN.
+ * Retourne null si déjà en anglais ou en cas d'échec.
+ */
+export async function translateToEnglishName(name: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt: `/no_think\nWhat is the official English Pokémon TCG card name for the card called "${name}"? Reply with ONLY the English name (e.g. "Charizard ex"), nothing else.`,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as OllamaGenerateResponse
+    const cleaned = data.response
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      .replace(/```[\s\S]*?```/g, '')
+      .trim()
+      .replace(/^["']|["']$/g, '') // enlever éventuelles guillemets
+    // Sanity : nom court, différent de l'original
+    if (!cleaned || cleaned.length > 60 || cleaned.toLowerCase() === name.toLowerCase()) return null
+    return cleaned
+  } catch {
+    return null
+  }
+}
+
 export async function generateScanJSON(params: {
   name: string
   set: string
