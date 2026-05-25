@@ -6,6 +6,14 @@ import type { ScanResult, SetCache } from '@/types/card'
 import PriceBadge from './PriceBadge'
 import { CONDITION_LABELS, CONDITIONS, type Condition } from '@/lib/conditions'
 
+// ── UUID compatible HTTP (crypto.randomUUID nécessite HTTPS) ───────────────
+function genId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
 // ── Détection HEIC (par extension ou MIME) ─────────────────────────────────
 function isHeic(file: File): boolean {
   if (file.type === 'image/heic' || file.type === 'image/heif') return true
@@ -250,7 +258,7 @@ function VisionTab({ onNewCard }: { onNewCard?: () => void }) {
     const newItems: QueueItem[] = Array.from(files)
       .filter(isImageFile)
       .map(file => ({
-        id: crypto.randomUUID(),
+        id: genId(),
         file,
         previewUrl: URL.createObjectURL(file),
         status: 'pending' as const,
